@@ -1,5 +1,5 @@
 #!/bin/sh
-# run-agent.sh - Privacy AI Remote Agent detach wrapper, version 1.4.
+# run-agent.sh - Privacy AI Remote Agent detach wrapper, version 1.5.
 # POSIX sh only (macOS + Linux). Starts one ACP agent detached, with stdin from a
 # named pipe and stdout appended to a log, so an SSH client can disconnect and
 # reattach. It opens no network connection, installs no service, login item or
@@ -7,7 +7,8 @@
 #
 #   version                               print the script version
 #   start  <id> <cwd> <agent command...>  start the agent detached, exit at once
-#                                         (a stopped id appends to its out.log: resume)
+#                                         (a stopped id appends to its out.log: resume);
+#                                         prints "started <id> ... keys=<names>"
 #   exec   <id> <agent command...>        run the agent in the foreground on this
 #                                         channel, with the same environment as start
 #   write  <id>                           copy this channel's stdin into the agent
@@ -21,9 +22,11 @@
 # Environment (start, exec): the key file <session>/agent.env the app may write
 # (0600), then with PRIVACYAI_SHELL_ENV=1 the variables your interactive shell sets
 # (~/.zshrc, ~/.bashrc), so the host's own settings win. Never PATH. Both files are
-# removed before the agent starts; no value is ever printed.
+# removed before the agent starts; no value is ever printed. PRIVACYAI_KEY_NAMES
+# (names separated by spaces): start reports on its started line which of them are
+# set after that (keys=A,B), names only.
 set -u
-VERSION='1.4'
+VERSION='1.5'
 BASE="${PRIVACYAI_HOME:-$HOME/.privacyai}"
 SESS="${BASE}/sessions"
 # The holder checks the agent every _ra_poll seconds and exits with it.
@@ -182,6 +185,8 @@ case "$cmd" in
     [ $# -ge 3 ] || die "usage: start <id> <cwd> <agent command...>"
     _ra_id="$1"; cwd="$2"; shift 2; valid_id "$_ra_id"
     _ra_d="${SESS}/${_ra_id}"
+    # Read before load_env: the capture never takes a PRIVACYAI_* or _ra_* name.
+    _ra_kn="${PRIVACYAI_KEY_NAMES:-}"
     # A die before the key file is sourced never leaves a key behind.
     trap 'rm -f "$_ra_d/agent.env" "$_ra_d/shell.env"' EXIT
     sweep_keys
@@ -196,6 +201,17 @@ case "$cmd" in
     : >> "$_ra_d/out.log"; : >> "$_ra_d/err.log"
     chmod 600 "$_ra_d/out.log" "$_ra_d/err.log"
     load_env "$_ra_d" 2>> "$_ra_d/err.log"
+    # keys=: the requested names that are set now. Only a valid name reaches eval;
+    # set -f keeps a stray * from matching files. Values are never printed.
+    _ra_keys=''
+    set -f
+    for _ra_n in $_ra_kn; do
+      case "$_ra_n" in ''|[!A-Za-z_]*|*[!A-Za-z0-9_]*) continue ;; esac
+      eval "_ra_v=\${$_ra_n:-}"
+      [ -n "$_ra_v" ] && _ra_keys="${_ra_keys:+$_ra_keys,}$_ra_n"
+    done
+    set +f
+    _ra_v=''
     # The agent: stdin from the fifo (open blocks until the holder opens the
     # write end), stdout appended to out.log. nohup ignores SIGHUP.
     nohup "$@" < "$_ra_d/in" >> "$_ra_d/out.log" 2>> "$_ra_d/err.log" &
@@ -215,7 +231,7 @@ case "$cmd" in
     ps -o pgid= -p $$ | tr -d ' ' > "$_ra_d/pgid"
     # An agent that exits at once can take the pid files with its holder already.
     chmod 600 "$_ra_d/agent.pid" "$_ra_d/holder.pid" "$_ra_d/agent.start" "$_ra_d/holder.start" "$_ra_d/pgid" 2>/dev/null
-    printf 'started %s agent=%s holder=%s pgid=%s\n' "$_ra_id" "$_ra_agent" "$_ra_holder" "$(cat "$_ra_d/pgid")"
+    printf 'started %s agent=%s holder=%s pgid=%s keys=%s\n' "$_ra_id" "$_ra_agent" "$_ra_holder" "$(cat "$_ra_d/pgid")" "$_ra_keys"
     exit 0
     ;;
   exec)

@@ -2,7 +2,8 @@
 
 `run-agent.sh` is the small shell script that the Privacy AI app's **Remote Agent** copies to your own
 computer or server, so a coding agent you start from your phone keeps running when the phone sleeps or
-loses its connection. This repository publishes the script so you can read exactly what runs on your host.
+loses its connection. `install-agent.sh` is the optional installer the app runs when you choose Install or
+Update for an agent. This repository publishes both scripts so you can read exactly what runs on your host.
 
 ## What it does
 
@@ -63,7 +64,8 @@ cat ~/.privacyai/run-agent.sh
 ~/.privacyai/run-agent.sh version
 ```
 
-The file in this repository at the tag `v<version>` is the script of that version.
+The file in this repository at the tag `v<version>` is the script of that version. The app links to `run-agent.sh` and
+`install-agent.sh` on `main`: those two file names never change and never move.
 
 ## How to remove it
 
@@ -75,12 +77,29 @@ rm -rf ~/.privacyai
 
 The next connection from the app copies the script again. Without it, a run stops when the connection drops.
 
+## The installer
+
+`install-agent.sh` installs or upgrades one npm-published agent, always at its latest version, for the user
+who runs it. It opens network connections to nodejs.org and the npm registry only, never uses sudo, never
+edits a shell rc or profile and installs no service, login item or scheduled job. An agent it installs goes
+into `~/.privacyai/tools` (programs in `tools/bin`), with its own Node there when the host has none or an
+older one than the agent needs (checked against the SHA-256 list published by nodejs.org). A copy you
+installed yourself with npm is upgraded in place only when you can write its npm prefix; a copy that is not
+managed by npm (a Git checkout, an official installer, a Homebrew formula) is left alone. Removing `~/.privacyai/tools` undoes everything it installed there. The file at
+the tag `install-v<version>` is the installer of that version.
+
 ## Versions
 
+- 1.5: `start` reports on its `started` line which of the requested API key names are set for the agent
+  (names only, never values).
 - 1.4: agents can start with the variables your interactive shell sets, and with an API key the app delivers
   in a private file that is deleted before the agent starts; new `exec` command for the connection test.
 - 1.3: recorded process ids are checked against their start time, so a reused process id is never treated
   as the session's agent.
+
+Installer versions:
+
+- 1.0: first release of `install-agent.sh`.
 
 ## License
 
